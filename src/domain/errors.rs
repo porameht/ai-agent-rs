@@ -13,6 +13,9 @@ pub enum DomainError {
 
     #[error("External service error: {0}")]
     ExternalService(String),
+
+    #[error("Timeout: {0}")]
+    Timeout(String),
 }
 
 impl DomainError {
@@ -30,6 +33,10 @@ impl DomainError {
 
     pub fn external(msg: impl Into<String>) -> Self {
         Self::ExternalService(msg.into())
+    }
+
+    pub fn timeout(msg: impl Into<String>) -> Self {
+        Self::Timeout(msg.into())
     }
 }
 

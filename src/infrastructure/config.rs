@@ -30,10 +30,16 @@ pub struct LlmConfig {
     pub model: String,
     #[serde(default = "default_max_tokens")]
     pub max_tokens: usize,
+    #[serde(default = "default_timeout_seconds")]
+    pub timeout_seconds: u64,
 }
 
 fn default_max_tokens() -> usize {
     4096
+}
+
+fn default_timeout_seconds() -> u64 {
+    120
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -141,6 +147,7 @@ impl Default for Config {
             llm: LlmConfig {
                 model: "gemini-3-flash-preview".to_string(),
                 max_tokens: 4096,
+                timeout_seconds: 120,
             },
             embedding: EmbeddingConfig {
                 model: "gemini-embedding-001".to_string(),

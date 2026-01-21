@@ -4,6 +4,7 @@
 llm:
   model: "gemini-3-flash-preview"
   max_tokens: 4096
+  timeout_seconds: 120
 
 # Embedding Settings
 embedding:
