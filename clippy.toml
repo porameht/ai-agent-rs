@@ -1,0 +1,26 @@
+# Clippy linting configuration
+# https://doc.rust-lang.org/clippy/
+
+# Cognitive complexity threshold for functions
+cognitive-complexity-threshold = 30
+
+# Maximum number of lines in a function body
+too-many-lines-threshold = 150
+
+# Maximum number of arguments a function can have
+too-many-arguments-threshold = 8
+
+# Minimum number of struct fields for the lints about field names to trigger
+struct-field-name-threshold = 3
+
+# Maximum size of enum variants
+enum-variant-size-threshold = 200
+
+# Maximum number of single char bindings a scope may have
+single-char-binding-names-threshold = 5
+
+# Allowed names below the minimum allowed characters
+allowed-idents-below-min-chars = ["i", "j", "x", "y", "z", "id", "db", "tx", "rx", "ok", "fs"]
+
+# MSRV (Minimum Supported Rust Version)
+msrv = "1.75"
