@@ -25,6 +25,9 @@ fn api_v1_routes() -> Router<AppState> {
         .route("/documents", post(documents::create_document))
         .route("/documents", get(documents::list_documents))
         .route("/documents/{id}", get(documents::get_document))
-        .route("/documents/{id}", axum::routing::delete(documents::delete_document))
+        .route(
+            "/documents/{id}",
+            axum::routing::delete(documents::delete_document),
+        )
         .route("/documents/search", post(documents::search_documents))
 }

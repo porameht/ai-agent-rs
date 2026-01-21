@@ -1,6 +1,6 @@
+use crate::domain::{errors::DomainError, Document, DocumentChunk};
 use async_trait::async_trait;
 use uuid::Uuid;
-use crate::domain::{errors::DomainError, Document, DocumentChunk};
 
 #[async_trait]
 pub trait DocumentStore: Send + Sync {

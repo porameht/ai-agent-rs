@@ -46,11 +46,9 @@ impl QdrantVectorStore {
         if !exists {
             self.client
                 .create_collection(
-                    CreateCollectionBuilder::new(&self.collection)
-                        .vectors_config(VectorParamsBuilder::new(
-                            self.dimension as u64,
-                            Distance::Cosine,
-                        )),
+                    CreateCollectionBuilder::new(&self.collection).vectors_config(
+                        VectorParamsBuilder::new(self.dimension as u64, Distance::Cosine),
+                    ),
                 )
                 .await
                 .map_err(|e| DomainError::external(e.to_string()))?;
@@ -69,7 +67,11 @@ impl QdrantVectorStore {
 
 #[async_trait]
 impl VectorStore for QdrantVectorStore {
-    async fn upsert(&self, chunk: &DocumentChunk, embedding: &Embedding) -> Result<(), DomainError> {
+    async fn upsert(
+        &self,
+        chunk: &DocumentChunk,
+        embedding: &Embedding,
+    ) -> Result<(), DomainError> {
         let payload: Payload = serde_json::json!({
             "chunk_id": chunk.id.to_string(),
             "document_id": chunk.document_id.to_string(),
@@ -93,7 +95,11 @@ impl VectorStore for QdrantVectorStore {
         Ok(())
     }
 
-    async fn search(&self, query: &Embedding, top_k: usize) -> Result<Vec<SearchResult>, DomainError> {
+    async fn search(
+        &self,
+        query: &Embedding,
+        top_k: usize,
+    ) -> Result<Vec<SearchResult>, DomainError> {
         let results = self
             .client
             .search_points(
@@ -109,16 +115,8 @@ impl VectorStore for QdrantVectorStore {
             .filter_map(|point| {
                 let payload = point.payload;
 
-                let chunk_id: Uuid = payload
-                    .get("chunk_id")?
-                    .as_str()?
-                    .parse()
-                    .ok()?;
-                let document_id: Uuid = payload
-                    .get("document_id")?
-                    .as_str()?
-                    .parse()
-                    .ok()?;
+                let chunk_id: Uuid = payload.get("chunk_id")?.as_str()?.parse().ok()?;
+                let document_id: Uuid = payload.get("document_id")?.as_str()?.parse().ok()?;
                 let content = payload.get("content")?.as_str()?.to_string();
                 let chunk_index = payload.get("chunk_index")?.as_integer()? as usize;
 
@@ -141,16 +139,10 @@ impl VectorStore for QdrantVectorStore {
     }
 
     async fn delete_by_document(&self, document_id: Uuid) -> Result<(), DomainError> {
-        let filter = Filter::must([Condition::matches(
-            "document_id",
-            document_id.to_string(),
-        )]);
+        let filter = Filter::must([Condition::matches("document_id", document_id.to_string())]);
 
         self.client
-            .delete_points(
-                DeletePointsBuilder::new(&self.collection)
-                    .points(filter),
-            )
+            .delete_points(DeletePointsBuilder::new(&self.collection).points(filter))
             .await
             .map_err(|e| DomainError::external(e.to_string()))?;
 

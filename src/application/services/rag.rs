@@ -31,7 +31,11 @@ impl RagService {
     }
 
     #[instrument(skip(self))]
-    pub async fn retrieve_top_k(&self, query: &str, top_k: usize) -> Result<Vec<SearchResult>, DomainError> {
+    pub async fn retrieve_top_k(
+        &self,
+        query: &str,
+        top_k: usize,
+    ) -> Result<Vec<SearchResult>, DomainError> {
         let embedding = self.embedding.embed(query).await?;
         self.vector_store.search(&embedding, top_k).await
     }

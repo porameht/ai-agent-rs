@@ -1,7 +1,6 @@
 mod jobs;
 
 pub use jobs::{
-    EmbedDocumentJob, IndexDocumentJob, ProcessChatJob,
-    JobResult, QueueJobStatus,
-    keys, queues, RESULT_TTL_SECONDS,
+    keys, queues, EmbedDocumentJob, IndexDocumentJob, JobResult, ProcessChatJob, QueueJobStatus,
+    RESULT_TTL_SECONDS,
 };

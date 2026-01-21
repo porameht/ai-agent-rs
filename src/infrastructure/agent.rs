@@ -59,7 +59,11 @@ impl ChatAgent {
             .map_err(|e| DomainError::external(e.to_string()))
     }
 
-    pub async fn chat_multi_turn(&self, message: &str, max_turns: usize) -> Result<String, DomainError> {
+    pub async fn chat_multi_turn(
+        &self,
+        message: &str,
+        max_turns: usize,
+    ) -> Result<String, DomainError> {
         let client = anthropic::Client::from_env();
         let tool = KnowledgeBaseTool::new(self.rag.clone(), self.top_k);
 

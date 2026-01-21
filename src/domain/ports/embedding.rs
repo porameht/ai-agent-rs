@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use crate::domain::{errors::DomainError, Embedding};
+use async_trait::async_trait;
 
 #[async_trait]
 pub trait EmbeddingService: Send + Sync {

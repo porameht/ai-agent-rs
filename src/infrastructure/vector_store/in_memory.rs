@@ -24,7 +24,11 @@ impl Default for InMemoryVectorStore {
 
 #[async_trait]
 impl VectorStore for InMemoryVectorStore {
-    async fn upsert(&self, chunk: &DocumentChunk, embedding: &Embedding) -> Result<(), DomainError> {
+    async fn upsert(
+        &self,
+        chunk: &DocumentChunk,
+        embedding: &Embedding,
+    ) -> Result<(), DomainError> {
         let mut store = self
             .chunks
             .write()
@@ -35,7 +39,11 @@ impl VectorStore for InMemoryVectorStore {
         Ok(())
     }
 
-    async fn search(&self, query: &Embedding, top_k: usize) -> Result<Vec<SearchResult>, DomainError> {
+    async fn search(
+        &self,
+        query: &Embedding,
+        top_k: usize,
+    ) -> Result<Vec<SearchResult>, DomainError> {
         let store = self
             .chunks
             .read()

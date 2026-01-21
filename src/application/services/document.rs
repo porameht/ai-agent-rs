@@ -2,9 +2,7 @@ use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::domain::{
-    ports::DocumentStore, ChunkMetadata, Document, DocumentChunk, DomainError,
-};
+use crate::domain::{ports::DocumentStore, ChunkMetadata, Document, DocumentChunk, DomainError};
 
 pub struct DocumentService {
     store: Arc<dyn DocumentStore>,
@@ -24,7 +22,11 @@ impl DocumentService {
     }
 
     #[instrument(skip(self, content), fields(name))]
-    pub async fn ingest(&self, name: &str, content: &str) -> Result<(Document, Vec<DocumentChunk>), DomainError> {
+    pub async fn ingest(
+        &self,
+        name: &str,
+        content: &str,
+    ) -> Result<(Document, Vec<DocumentChunk>), DomainError> {
         let doc = Document::new(name);
         self.store.save_document(&doc).await?;
 
@@ -42,7 +44,10 @@ impl DocumentService {
     }
 
     #[instrument(skip(self))]
-    pub async fn get_with_chunks(&self, id: Uuid) -> Result<Option<(Document, Vec<DocumentChunk>)>, DomainError> {
+    pub async fn get_with_chunks(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<(Document, Vec<DocumentChunk>)>, DomainError> {
         let doc = self.store.get_document(id).await?;
         match doc {
             Some(d) => {

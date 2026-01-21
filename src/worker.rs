@@ -6,8 +6,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use ai_agent::application::RagService;
 use ai_agent::infrastructure::{
-    keys, queues, ChatAgent, EmbedDocumentJob, IndexDocumentJob, JobResult,
-    TextEmbedding, QdrantVectorStore, ProcessChatJob, QueueJobStatus, RESULT_TTL_SECONDS,
+    keys, queues, ChatAgent, EmbedDocumentJob, IndexDocumentJob, JobResult, ProcessChatJob,
+    QdrantVectorStore, QueueJobStatus, TextEmbedding, RESULT_TTL_SECONDS,
 };
 
 const EMBEDDING_DIMENSION: usize = 1536;
@@ -45,7 +45,7 @@ impl WorkerState {
     pub async fn new(redis_pool: RedisPool, qdrant_url: &str) -> anyhow::Result<Self> {
         let embedding = Arc::new(TextEmbedding::new());
         let vector_store = Arc::new(
-            QdrantVectorStore::new(qdrant_url, COLLECTION_NAME, EMBEDDING_DIMENSION).await?
+            QdrantVectorStore::new(qdrant_url, COLLECTION_NAME, EMBEDDING_DIMENSION).await?,
         );
         let rag = Arc::new(RagService::new(embedding, vector_store, 5));
         let agent = Arc::new(ChatAgent::new(rag.clone()));

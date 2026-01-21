@@ -32,7 +32,11 @@ impl LlmService for AnthropicLlm {
             .map_err(|e| DomainError::external(e.to_string()))
     }
 
-    async fn complete_with_system(&self, system: &str, prompt: &str) -> Result<String, DomainError> {
+    async fn complete_with_system(
+        &self,
+        system: &str,
+        prompt: &str,
+    ) -> Result<String, DomainError> {
         let client = anthropic::Client::from_env();
         let agent = client.agent(&self.model).preamble(system).build();
         agent
