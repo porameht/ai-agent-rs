@@ -56,13 +56,6 @@ impl QdrantVectorStore {
 
         Ok(())
     }
-
-    fn uuid_to_point_id(id: Uuid) -> u64 {
-        let bytes = id.as_bytes();
-        u64::from_le_bytes([
-            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-        ])
-    }
 }
 
 #[async_trait]
@@ -81,11 +74,7 @@ impl VectorStore for QdrantVectorStore {
         .try_into()
         .map_err(|_| DomainError::internal("Failed to create payload"))?;
 
-        let point = PointStruct::new(
-            Self::uuid_to_point_id(chunk.id),
-            embedding.as_slice().to_vec(),
-            payload,
-        );
+        let point = PointStruct::new(chunk.id.to_string(), embedding.as_slice().to_vec(), payload);
 
         self.client
             .upsert_points(UpsertPointsBuilder::new(&self.collection, vec![point]))

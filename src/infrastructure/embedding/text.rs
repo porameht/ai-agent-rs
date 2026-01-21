@@ -4,9 +4,7 @@ use rig::embeddings::EmbeddingsBuilder;
 use rig::providers::openai;
 
 use crate::domain::{ports::EmbeddingService, DomainError, Embedding};
-
-const DEFAULT_MODEL: &str = "text-embedding-3-small";
-const DEFAULT_DIMENSION: usize = 1536;
+use crate::infrastructure::config::EmbeddingConfig;
 
 pub struct TextEmbedding {
     model: String,
@@ -16,8 +14,15 @@ pub struct TextEmbedding {
 impl TextEmbedding {
     pub fn new() -> Self {
         Self {
-            model: DEFAULT_MODEL.to_string(),
-            dimension: DEFAULT_DIMENSION,
+            model: "text-embedding-3-small".to_string(),
+            dimension: 1536,
+        }
+    }
+
+    pub fn from_config(config: &EmbeddingConfig) -> Self {
+        Self {
+            model: config.model.clone(),
+            dimension: config.dimension,
         }
     }
 

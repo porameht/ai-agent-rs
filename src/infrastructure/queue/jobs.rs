@@ -14,9 +14,11 @@ pub mod keys {
     pub fn job_status(job_id: &Uuid) -> String {
         format!("job:status:{}", job_id)
     }
-}
 
-pub const RESULT_TTL_SECONDS: u64 = 86400;
+    pub fn conversation(conversation_id: &Uuid) -> String {
+        format!("conversation:{}", conversation_id)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

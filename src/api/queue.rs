@@ -2,7 +2,7 @@ use deadpool_redis::{redis::AsyncCommands, Config, Pool, Runtime};
 use uuid::Uuid;
 
 use crate::infrastructure::{
-    keys, queues, EmbedDocumentJob, IndexDocumentJob, JobResult, ProcessChatJob, RESULT_TTL_SECONDS,
+    keys, queues, EmbedDocumentJob, IndexDocumentJob, JobResult, ProcessChatJob,
 };
 
 pub type RedisPool = Pool;
@@ -28,11 +28,12 @@ pub fn create_pool(redis_url: &str) -> Result<RedisPool> {
 #[derive(Clone)]
 pub struct JobProducer {
     pool: RedisPool,
+    result_ttl: u64,
 }
 
 impl JobProducer {
-    pub fn new(pool: RedisPool) -> Self {
-        Self { pool }
+    pub fn new(pool: RedisPool, result_ttl: u64) -> Self {
+        Self { pool, result_ttl }
     }
 
     async fn conn(&self) -> Result<deadpool_redis::Connection> {
@@ -50,7 +51,7 @@ impl JobProducer {
             .map_err(|e| QueueError::Redis(e.to_string()))?;
 
         let status = serde_json::to_string(&JobResult::pending(job_id))?;
-        conn.set_ex::<_, _, ()>(keys::job_status(&job_id), &status, RESULT_TTL_SECONDS)
+        conn.set_ex::<_, _, ()>(keys::job_status(&job_id), &status, self.result_ttl)
             .await
             .map_err(|e| QueueError::Redis(e.to_string()))?;
 

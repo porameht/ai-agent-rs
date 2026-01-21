@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::api::queue::{JobProducer, RedisPool};
 use crate::application::{DocumentService, RagService};
+use crate::infrastructure::AppConfig;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -9,16 +10,20 @@ pub struct AppState {
     pub job_producer: JobProducer,
     pub document_service: Option<Arc<DocumentService>>,
     pub rag_service: Option<Arc<RagService>>,
+    pub config: Arc<AppConfig>,
 }
 
 impl AppState {
-    pub fn new(redis_pool: RedisPool) -> Self {
-        let job_producer = JobProducer::new(redis_pool.clone());
+    pub fn new(redis_pool: RedisPool, config: AppConfig) -> Self {
+        let config = Arc::new(config);
+        let job_producer =
+            JobProducer::new(redis_pool.clone(), config.config.worker.result_ttl_seconds);
         Self {
             redis_pool,
             job_producer,
             document_service: None,
             rag_service: None,
+            config,
         }
     }
 

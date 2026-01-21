@@ -5,6 +5,7 @@ use serde_json::json;
 use std::sync::Arc;
 
 use crate::application::RagService;
+use crate::infrastructure::config::KnowledgeBaseToolConfig;
 
 #[derive(Debug, thiserror::Error)]
 #[error("Knowledge base error: {0}")]
@@ -18,15 +19,24 @@ pub struct KnowledgeBaseArgs {
 pub struct KnowledgeBaseTool {
     rag: Arc<RagService>,
     top_k: usize,
+    config: KnowledgeBaseToolConfig,
 }
 
 impl KnowledgeBaseTool {
-    pub fn new(rag: Arc<RagService>, top_k: usize) -> Self {
-        Self { rag, top_k }
+    pub fn new(rag: Arc<RagService>, top_k: usize, config: KnowledgeBaseToolConfig) -> Self {
+        Self { rag, top_k, config }
     }
 
-    pub fn with_rag(rag: Arc<RagService>) -> Self {
-        Self::new(rag, 5)
+    pub fn with_defaults(rag: Arc<RagService>) -> Self {
+        Self::new(
+            rag,
+            5,
+            KnowledgeBaseToolConfig {
+                name: "knowledge_base".to_string(),
+                description: "Search the knowledge base for relevant information.".to_string(),
+                no_results_message: "No relevant documents found.".to_string(),
+            },
+        )
     }
 }
 
@@ -39,8 +49,8 @@ impl Tool for KnowledgeBaseTool {
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
-            name: "knowledge_base".to_string(),
-            description: "Search the knowledge base for relevant information.".to_string(),
+            name: self.config.name.clone(),
+            description: self.config.description.clone(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -69,7 +79,7 @@ impl Tool for KnowledgeBaseTool {
             .join("\n\n");
 
         Ok(if output.is_empty() {
-            "No relevant documents found.".to_string()
+            self.config.no_results_message.clone()
         } else {
             output
         })

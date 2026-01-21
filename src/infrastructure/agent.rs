@@ -4,28 +4,32 @@ use rig::providers::anthropic;
 use std::sync::Arc;
 
 use crate::application::RagService;
-use crate::domain::DomainError;
+use crate::domain::{DomainError, Message, MessageRole};
+use crate::infrastructure::config::{AppConfig, KnowledgeBaseToolConfig};
 
 use super::tools::KnowledgeBaseTool;
-
-const DEFAULT_MODEL: &str = "claude-sonnet-4-20250514";
-const DEFAULT_PREAMBLE: &str = "You are a helpful assistant. Use the knowledge_base tool to search for relevant information when needed.";
 
 pub struct ChatAgent {
     model: String,
     preamble: String,
     rag: Arc<RagService>,
     top_k: usize,
+    tool_config: KnowledgeBaseToolConfig,
 }
 
 impl ChatAgent {
-    pub fn new(rag: Arc<RagService>) -> Self {
+    pub fn new(rag: Arc<RagService>, config: &AppConfig) -> Self {
         Self {
-            model: DEFAULT_MODEL.to_string(),
-            preamble: DEFAULT_PREAMBLE.to_string(),
+            model: config.config.llm.model.clone(),
+            preamble: config.prompts.agent.system.clone(),
             rag,
-            top_k: 5,
+            top_k: config.config.rag.top_k,
+            tool_config: config.config.tools.knowledge_base.clone(),
         }
+    }
+
+    pub fn with_defaults(rag: Arc<RagService>) -> Self {
+        Self::new(rag, &AppConfig::default())
     }
 
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
@@ -44,8 +48,16 @@ impl ChatAgent {
     }
 
     pub async fn chat(&self, message: &str) -> Result<String, DomainError> {
+        self.chat_with_history(message, &[]).await
+    }
+
+    pub async fn chat_with_history(
+        &self,
+        message: &str,
+        history: &[Message],
+    ) -> Result<String, DomainError> {
         let client = anthropic::Client::from_env();
-        let tool = KnowledgeBaseTool::new(self.rag.clone(), self.top_k);
+        let tool = KnowledgeBaseTool::new(self.rag.clone(), self.top_k, self.tool_config.clone());
 
         let agent = client
             .agent(&self.model)
@@ -53,8 +65,29 @@ impl ChatAgent {
             .tool(tool)
             .build();
 
+        let prompt = if history.is_empty() {
+            message.to_string()
+        } else {
+            let context = history
+                .iter()
+                .map(|m| {
+                    let role = match m.role {
+                        MessageRole::User => "User",
+                        MessageRole::Assistant => "Assistant",
+                        MessageRole::System => "System",
+                    };
+                    format!("{}: {}", role, m.content)
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!(
+                "Previous conversation:\n{}\n\nCurrent message from user: {}",
+                context, message
+            )
+        };
+
         agent
-            .prompt(message)
+            .prompt(&prompt)
             .await
             .map_err(|e| DomainError::external(e.to_string()))
     }
@@ -65,7 +98,7 @@ impl ChatAgent {
         max_turns: usize,
     ) -> Result<String, DomainError> {
         let client = anthropic::Client::from_env();
-        let tool = KnowledgeBaseTool::new(self.rag.clone(), self.top_k);
+        let tool = KnowledgeBaseTool::new(self.rag.clone(), self.top_k, self.tool_config.clone());
 
         let agent = client
             .agent(&self.model)
