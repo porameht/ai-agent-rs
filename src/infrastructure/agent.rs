@@ -1,6 +1,6 @@
 use rig::client::{CompletionClient, ProviderClient};
 use rig::completion::Prompt;
-use rig::providers::anthropic;
+use rig::providers::gemini;
 use std::sync::Arc;
 
 use crate::application::RagService;
@@ -55,7 +55,7 @@ impl ChatAgent {
         message: &str,
         history: &[Message],
     ) -> Result<String, DomainError> {
-        let client = anthropic::Client::from_env();
+        let client = gemini::Client::from_env();
         let tool = KnowledgeBaseTool::new(self.rag.clone(), self.top_k, self.tool_config.clone());
 
         let agent = client
@@ -77,7 +77,7 @@ impl ChatAgent {
         message: &str,
         max_turns: usize,
     ) -> Result<String, DomainError> {
-        let client = anthropic::Client::from_env();
+        let client = gemini::Client::from_env();
         let tool = KnowledgeBaseTool::new(self.rag.clone(), self.top_k, self.tool_config.clone());
 
         let agent = client

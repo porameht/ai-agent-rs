@@ -139,12 +139,12 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             llm: LlmConfig {
-                model: "claude-sonnet-4-20250514".to_string(),
+                model: "gemini-3-flash-preview".to_string(),
                 max_tokens: 4096,
             },
             embedding: EmbeddingConfig {
-                model: "text-embedding-3-small".to_string(),
-                dimension: 1536,
+                model: "gemini-embedding-001".to_string(),
+                dimension: 768,
             },
             vector_store: VectorStoreConfig {
                 collection: "knowledge_base".to_string(),

@@ -90,8 +90,8 @@ pub fn chunk_content(document_id: Uuid, content: &str, chunk_size: usize) -> Vec
     let mut chunk_index = 0;
 
     for paragraph in paragraphs {
-        let would_exceed = !current_chunk.is_empty()
-            && current_chunk.len() + paragraph.len() + 2 > chunk_size;
+        let would_exceed =
+            !current_chunk.is_empty() && current_chunk.len() + paragraph.len() + 2 > chunk_size;
 
         if would_exceed {
             chunks.push(DocumentChunk::new(document_id, &current_chunk, chunk_index));

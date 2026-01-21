@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use rig::client::{EmbeddingsClient, ProviderClient};
 use rig::embeddings::EmbeddingsBuilder;
-use rig::providers::openai;
+use rig::providers::gemini;
 
 use crate::domain::{ports::EmbeddingService, DomainError, Embedding};
 use crate::infrastructure::config::EmbeddingConfig;
@@ -14,8 +14,8 @@ pub struct TextEmbedding {
 impl TextEmbedding {
     pub fn new() -> Self {
         Self {
-            model: "text-embedding-3-small".to_string(),
-            dimension: 1536,
+            model: "gemini-embedding-001".to_string(),
+            dimension: 768,
         }
     }
 
@@ -46,7 +46,7 @@ impl Default for TextEmbedding {
 #[async_trait]
 impl EmbeddingService for TextEmbedding {
     async fn embed(&self, text: &str) -> Result<Embedding, DomainError> {
-        let client = openai::Client::from_env();
+        let client = gemini::Client::from_env();
         let model = client.embedding_model(&self.model);
 
         let embeddings = EmbeddingsBuilder::new(model)
@@ -71,7 +71,7 @@ impl EmbeddingService for TextEmbedding {
             return Ok(Vec::new());
         }
 
-        let client = openai::Client::from_env();
+        let client = gemini::Client::from_env();
         let model = client.embedding_model(&self.model);
 
         let mut builder = EmbeddingsBuilder::new(model);

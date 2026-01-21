@@ -19,7 +19,7 @@ The LLM decides when to use tools, enabling flexible multi-step reasoning.
 
 ```bash
 # Setup
-cp .env.example .env  # Add ANTHROPIC_API_KEY and OPENAI_API_KEY
+cp .env.example .env  # Add GEMINI_API_KEY
 
 # Run
 docker compose up -d
@@ -55,8 +55,7 @@ curl -X POST http://localhost:8080/api/v1/documents/search \
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Claude API key | Required |
-| `OPENAI_API_KEY` | Embeddings API key | Required |
+| `GEMINI_API_KEY` | Google Gemini API key | Required |
 | `REDIS_URL` | Redis connection | `redis://localhost:6379` |
 | `QDRANT_URL` | Qdrant URL | `http://localhost:6334` |
 | `SERVER_PORT` | API port | `8080` |
@@ -71,10 +70,10 @@ Settings and prompts are in `config/`:
 ```yaml
 # config/agent.yaml
 llm:
-  model: "claude-sonnet-4-20250514"
+  model: "gemini-3-flash-preview"
 embedding:
-  model: "text-embedding-3-small"
-  dimension: 1536
+  model: "gemini-embedding-001"
+  dimension: 768
 rag:
   top_k: 5
   chunk_size: 1000

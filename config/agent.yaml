@@ -2,13 +2,13 @@
 
 # LLM Settings
 llm:
-  model: "claude-sonnet-4-20250514"
+  model: "gemini-3-flash-preview"
   max_tokens: 4096
 
 # Embedding Settings
 embedding:
-  model: "text-embedding-3-small"
-  dimension: 1536
+  model: "gemini-embedding-001"
+  dimension: 768
 
 # Vector Store Settings
 vector_store:
