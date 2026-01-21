@@ -6,7 +6,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
 use ai_agent::application::RagService;
-use ai_agent::domain::{ChunkMetadata, Conversation, DocumentChunk, Message, MessageRole};
+use ai_agent::domain::{chunk_content, Conversation, Message, MessageRole};
 use ai_agent::infrastructure::{
     keys, queues, AppConfig, ChatAgent, EmbedDocumentJob, IndexDocumentJob, JobResult,
     ProcessChatJob, QdrantVectorStore, TextEmbedding,
@@ -22,8 +22,6 @@ pub enum WorkerError {
     Redis(String),
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
-    #[error("Processing error: {0}")]
-    Processing(String),
 }
 
 pub type Result<T> = std::result::Result<T, WorkerError>;
@@ -72,6 +70,13 @@ impl WorkerState {
             config,
         })
     }
+
+    async fn get_connection(&self) -> Result<Connection> {
+        self.redis_pool
+            .get()
+            .await
+            .map_err(|e| WorkerError::Pool(e.to_string()))
+    }
 }
 
 pub struct JobConsumer {
@@ -107,17 +112,9 @@ impl JobConsumer {
     }
 }
 
-async fn conn(state: &WorkerState) -> Result<Connection> {
-    state
-        .redis_pool
-        .get()
-        .await
-        .map_err(|e| WorkerError::Pool(e.to_string()))
-}
-
-async fn set_status(
+async fn set_job_status(
     conn: &mut Connection,
-    job_id: uuid::Uuid,
+    job_id: Uuid,
     status: &JobResult,
     ttl: u64,
 ) -> Result<()> {
@@ -128,9 +125,9 @@ async fn set_status(
 }
 
 async fn process_next_job(state: &WorkerState) -> Result<()> {
-    let mut c = conn(state).await?;
+    let mut conn = state.get_connection().await?;
 
-    let result: Option<(String, String)> = c
+    let result: Option<(String, String)> = conn
         .brpop(
             &[queues::CHAT_QUEUE, queues::EMBED_QUEUE, queues::INDEX_QUEUE],
             1.0,
@@ -140,13 +137,13 @@ async fn process_next_job(state: &WorkerState) -> Result<()> {
 
     if let Some((queue, job_json)) = result {
         match queue.as_str() {
-            q if q == queues::CHAT_QUEUE => {
+            queues::CHAT_QUEUE => {
                 process_chat_job(state, serde_json::from_str(&job_json)?).await?;
             }
-            q if q == queues::EMBED_QUEUE => {
+            queues::EMBED_QUEUE => {
                 process_embed_job(state, serde_json::from_str(&job_json)?).await?;
             }
-            q if q == queues::INDEX_QUEUE => {
+            queues::INDEX_QUEUE => {
                 process_index_job(state, serde_json::from_str(&job_json)?).await?;
             }
             _ => tracing::warn!(queue, "unknown queue"),
@@ -157,26 +154,24 @@ async fn process_next_job(state: &WorkerState) -> Result<()> {
 
 async fn process_chat_job(state: &WorkerState, job: ProcessChatJob) -> Result<()> {
     tracing::info!(job_id = %job.job_id, conversation_id = ?job.conversation_id, "processing chat");
-    let mut c = conn(state).await?;
+    let mut conn = state.get_connection().await?;
     let result_ttl = state.config.config.worker.result_ttl_seconds;
     let conv_ttl = state.config.config.worker.conversation_ttl_seconds;
 
-    set_status(
-        &mut c,
+    set_job_status(
+        &mut conn,
         job.job_id,
         &JobResult::processing(job.job_id),
         result_ttl,
     )
     .await?;
 
-    // Load or create conversation
     let conversation_id = job.conversation_id.unwrap_or_else(Uuid::new_v4);
-    let mut conversation = load_conversation(&mut c, &conversation_id).await?;
+    let mut conversation = load_conversation(&mut conn, &conversation_id).await?;
 
-    // Add user message to history
     conversation.add_message(MessageRole::User, &job.message);
 
-    // Get history (excluding the current message we just added)
+    // Get history excluding the message we just added
     let history: Vec<Message> = conversation
         .messages
         .iter()
@@ -188,14 +183,11 @@ async fn process_chat_job(state: &WorkerState, job: ProcessChatJob) -> Result<()
 
     match response {
         Ok(result) => {
-            // Add assistant response to conversation
             conversation.add_message(MessageRole::Assistant, &result);
+            save_conversation(&mut conn, &conversation_id, &conversation, conv_ttl).await?;
 
-            // Save updated conversation
-            save_conversation(&mut c, &conversation_id, &conversation, conv_ttl).await?;
-
-            set_status(
-                &mut c,
+            set_job_status(
+                &mut conn,
                 job.job_id,
                 &JobResult::completed(
                     job.job_id,
@@ -209,8 +201,8 @@ async fn process_chat_job(state: &WorkerState, job: ProcessChatJob) -> Result<()
             .await?;
         }
         Err(e) => {
-            set_status(
-                &mut c,
+            set_job_status(
+                &mut conn,
                 job.job_id,
                 &JobResult::failed(job.job_id, e.to_string()),
                 result_ttl,
@@ -251,151 +243,69 @@ async fn save_conversation(
 
 async fn process_embed_job(state: &WorkerState, job: EmbedDocumentJob) -> Result<()> {
     tracing::info!(job_id = %job.job_id, document_id = %job.document_id, "processing embed");
-    let mut c = conn(state).await?;
+    let mut conn = state.get_connection().await?;
     let result_ttl = state.config.config.worker.result_ttl_seconds;
     let chunk_size = state.config.config.rag.chunk_size;
 
-    set_status(
-        &mut c,
+    set_job_status(
+        &mut conn,
         job.job_id,
         &JobResult::processing(job.job_id),
         result_ttl,
     )
     .await?;
 
-    let chunks = chunk_content(&job.document_id, &job.content, chunk_size);
+    let chunks = chunk_content(job.document_id, &job.content, chunk_size);
 
-    if chunks.is_empty() {
-        set_status(
-            &mut c,
+    let result = if chunks.is_empty() {
+        JobResult::completed(
             job.job_id,
-            &JobResult::completed(
-                job.job_id,
-                serde_json::json!({ "document_id": job.document_id, "chunks_created": 0 }),
-            ),
-            result_ttl,
+            serde_json::json!({ "document_id": job.document_id, "chunks_created": 0 }),
         )
-        .await?;
-        return Ok(());
-    }
-
-    match state.rag.index_chunks(&chunks).await {
-        Ok(()) => {
-            set_status(
-                &mut c,
+    } else {
+        match state.rag.index_chunks(&chunks).await {
+            Ok(()) => JobResult::completed(
                 job.job_id,
-                &JobResult::completed(
-                    job.job_id,
-                    serde_json::json!({
-                        "document_id": job.document_id,
-                        "chunks_created": chunks.len()
-                    }),
-                ),
-                result_ttl,
-            )
-            .await?;
+                serde_json::json!({
+                    "document_id": job.document_id,
+                    "chunks_created": chunks.len()
+                }),
+            ),
+            Err(e) => JobResult::failed(job.job_id, e.to_string()),
         }
-        Err(e) => {
-            set_status(
-                &mut c,
-                job.job_id,
-                &JobResult::failed(job.job_id, e.to_string()),
-                result_ttl,
-            )
-            .await?;
-        }
-    }
+    };
 
+    set_job_status(&mut conn, job.job_id, &result, result_ttl).await?;
     tracing::info!(job_id = %job.job_id, chunks = chunks.len(), "embed completed");
     Ok(())
 }
 
-fn chunk_content(document_id: &Uuid, content: &str, chunk_size: usize) -> Vec<DocumentChunk> {
-    let paragraphs: Vec<&str> = content
-        .split("\n\n")
-        .filter(|s| !s.trim().is_empty())
-        .collect();
-
-    let mut chunks = Vec::new();
-    let mut current_chunk = String::new();
-    let mut chunk_index = 0;
-
-    for para in paragraphs {
-        let trimmed = para.trim();
-
-        if !current_chunk.is_empty() && current_chunk.len() + trimmed.len() + 2 > chunk_size {
-            chunks.push(DocumentChunk {
-                id: Uuid::new_v4(),
-                document_id: *document_id,
-                content: current_chunk.clone(),
-                chunk_index,
-                metadata: ChunkMetadata::default(),
-            });
-            current_chunk.clear();
-            chunk_index += 1;
-        }
-
-        if !current_chunk.is_empty() {
-            current_chunk.push_str("\n\n");
-        }
-        current_chunk.push_str(trimmed);
-    }
-
-    if !current_chunk.is_empty() {
-        chunks.push(DocumentChunk {
-            id: Uuid::new_v4(),
-            document_id: *document_id,
-            content: current_chunk,
-            chunk_index,
-            metadata: ChunkMetadata::default(),
-        });
-    }
-
-    chunks
-}
-
 async fn process_index_job(state: &WorkerState, job: IndexDocumentJob) -> Result<()> {
     tracing::info!(job_id = %job.job_id, document_id = %job.document_id, "processing index");
-    let mut c = conn(state).await?;
+    let mut conn = state.get_connection().await?;
     let result_ttl = state.config.config.worker.result_ttl_seconds;
 
-    set_status(
-        &mut c,
+    set_job_status(
+        &mut conn,
         job.job_id,
         &JobResult::processing(job.job_id),
         result_ttl,
     )
     .await?;
 
-    // Delete existing vectors for this document before re-indexing
-    match state.rag.delete_document(job.document_id).await {
-        Ok(()) => {
-            set_status(
-                &mut c,
-                job.job_id,
-                &JobResult::completed(
-                    job.job_id,
-                    serde_json::json!({
-                        "document_id": job.document_id,
-                        "indexed": true,
-                        "action": "cleared_vectors"
-                    }),
-                ),
-                result_ttl,
-            )
-            .await?;
-        }
-        Err(e) => {
-            set_status(
-                &mut c,
-                job.job_id,
-                &JobResult::failed(job.job_id, e.to_string()),
-                result_ttl,
-            )
-            .await?;
-        }
-    }
+    let result = match state.rag.delete_document(job.document_id).await {
+        Ok(()) => JobResult::completed(
+            job.job_id,
+            serde_json::json!({
+                "document_id": job.document_id,
+                "indexed": true,
+                "action": "cleared_vectors"
+            }),
+        ),
+        Err(e) => JobResult::failed(job.job_id, e.to_string()),
+    };
 
+    set_job_status(&mut conn, job.job_id, &result, result_ttl).await?;
     tracing::info!(job_id = %job.job_id, "index completed");
     Ok(())
 }
@@ -412,7 +322,6 @@ async fn main() -> anyhow::Result<()> {
 
     dotenvy::dotenv().ok();
 
-    // Load config from YAML files, fallback to defaults if not found
     let config = AppConfig::load().unwrap_or_else(|e| {
         tracing::warn!(error = %e, "Failed to load config, using defaults");
         AppConfig::default()

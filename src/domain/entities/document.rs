@@ -73,3 +73,76 @@ pub struct SearchResult {
     pub chunk: DocumentChunk,
     pub score: f32,
 }
+
+/// Splits content into chunks by paragraph boundaries.
+///
+/// Paragraphs are joined until they exceed `chunk_size`, then a new chunk starts.
+/// Each chunk is assigned a sequential index starting from 0.
+pub fn chunk_content(document_id: Uuid, content: &str, chunk_size: usize) -> Vec<DocumentChunk> {
+    let paragraphs: Vec<&str> = content
+        .split("\n\n")
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let mut chunks = Vec::new();
+    let mut current_chunk = String::new();
+    let mut chunk_index = 0;
+
+    for paragraph in paragraphs {
+        let would_exceed = !current_chunk.is_empty()
+            && current_chunk.len() + paragraph.len() + 2 > chunk_size;
+
+        if would_exceed {
+            chunks.push(DocumentChunk::new(document_id, &current_chunk, chunk_index));
+            current_chunk.clear();
+            chunk_index += 1;
+        }
+
+        if !current_chunk.is_empty() {
+            current_chunk.push_str("\n\n");
+        }
+        current_chunk.push_str(paragraph);
+    }
+
+    if !current_chunk.is_empty() {
+        chunks.push(DocumentChunk::new(document_id, current_chunk, chunk_index));
+    }
+
+    chunks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chunk_content_single_chunk() {
+        let doc_id = Uuid::new_v4();
+        let content = "Hello world.\n\nThis is a test.";
+        let chunks = chunk_content(doc_id, content, 100);
+
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].content, "Hello world.\n\nThis is a test.");
+        assert_eq!(chunks[0].chunk_index, 0);
+    }
+
+    #[test]
+    fn test_chunk_content_multiple_chunks() {
+        let doc_id = Uuid::new_v4();
+        let content = "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.";
+        let chunks = chunk_content(doc_id, content, 30);
+
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0].chunk_index, 0);
+        assert_eq!(chunks[1].chunk_index, 1);
+        assert_eq!(chunks[2].chunk_index, 2);
+    }
+
+    #[test]
+    fn test_chunk_content_empty() {
+        let doc_id = Uuid::new_v4();
+        let chunks = chunk_content(doc_id, "", 100);
+        assert!(chunks.is_empty());
+    }
+}

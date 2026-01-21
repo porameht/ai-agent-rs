@@ -13,21 +13,15 @@ pub struct Config {
     pub cors: CorsConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct CorsConfig {
-    #[serde(default = "default_cors_origins")]
+    #[serde(default)]
     pub allowed_origins: Vec<String>,
 }
 
-fn default_cors_origins() -> Vec<String> {
-    vec!["*".to_string()]
-}
-
-impl Default for CorsConfig {
-    fn default() -> Self {
-        Self {
-            allowed_origins: default_cors_origins(),
-        }
+impl CorsConfig {
+    pub fn is_permissive(&self) -> bool {
+        self.allowed_origins.is_empty() || self.allowed_origins.iter().any(|o| o == "*")
     }
 }
 

@@ -6,11 +6,12 @@ use axum::http::{header, Method};
 use axum::{routing::get, routing::post, Router};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
+use tracing::warn;
 
 use crate::api::state::AppState;
 
 pub fn create_router(state: AppState) -> Router {
-    let cors = build_cors(&state.config.config.cors.allowed_origins);
+    let cors = build_cors(&state);
 
     Router::new()
         .route("/health", get(health::health_check))
@@ -21,15 +22,22 @@ pub fn create_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-fn build_cors(origins: &[String]) -> CorsLayer {
+fn build_cors(state: &AppState) -> CorsLayer {
+    let cors_config = &state.config.config.cors;
+
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
 
-    if origins.is_empty() || origins.iter().any(|o| o == "*") {
+    if cors_config.is_permissive() {
+        warn!("CORS is configured to allow all origins - not recommended for production");
         cors.allow_origin(Any)
     } else {
-        let origins: Vec<_> = origins.iter().filter_map(|o| o.parse().ok()).collect();
+        let origins: Vec<_> = cors_config
+            .allowed_origins
+            .iter()
+            .filter_map(|o| o.parse().ok())
+            .collect();
         cors.allow_origin(origins)
     }
 }

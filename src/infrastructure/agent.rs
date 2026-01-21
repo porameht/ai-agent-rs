@@ -4,14 +4,13 @@ use rig::providers::anthropic;
 use std::sync::Arc;
 
 use crate::application::RagService;
-use crate::domain::{DomainError, Message, MessageRole};
+use crate::domain::{DomainError, Message};
 use crate::infrastructure::config::{AppConfig, KnowledgeBaseToolConfig};
-
-use super::tools::KnowledgeBaseTool;
+use crate::infrastructure::tools::KnowledgeBaseTool;
 
 pub struct ChatAgent {
     model: String,
-    preamble: String,
+    system_prompt: String,
     rag: Arc<RagService>,
     top_k: usize,
     tool_config: KnowledgeBaseToolConfig,
@@ -21,7 +20,7 @@ impl ChatAgent {
     pub fn new(rag: Arc<RagService>, config: &AppConfig) -> Self {
         Self {
             model: config.config.llm.model.clone(),
-            preamble: config.prompts.agent.system.clone(),
+            system_prompt: config.prompts.agent.system.clone(),
             rag,
             top_k: config.config.rag.top_k,
             tool_config: config.config.tools.knowledge_base.clone(),
@@ -37,8 +36,8 @@ impl ChatAgent {
         self
     }
 
-    pub fn with_preamble(mut self, preamble: impl Into<String>) -> Self {
-        self.preamble = preamble.into();
+    pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.system_prompt = prompt.into();
         self
     }
 
@@ -61,30 +60,11 @@ impl ChatAgent {
 
         let agent = client
             .agent(&self.model)
-            .preamble(&self.preamble)
+            .preamble(&self.system_prompt)
             .tool(tool)
             .build();
 
-        let prompt = if history.is_empty() {
-            message.to_string()
-        } else {
-            let context = history
-                .iter()
-                .map(|m| {
-                    let role = match m.role {
-                        MessageRole::User => "User",
-                        MessageRole::Assistant => "Assistant",
-                        MessageRole::System => "System",
-                    };
-                    format!("{}: {}", role, m.content)
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            format!(
-                "Previous conversation:\n{}\n\nCurrent message from user: {}",
-                context, message
-            )
-        };
+        let prompt = self.build_prompt(message, history);
 
         agent
             .prompt(&prompt)
@@ -102,7 +82,7 @@ impl ChatAgent {
 
         let agent = client
             .agent(&self.model)
-            .preamble(&self.preamble)
+            .preamble(&self.system_prompt)
             .tool(tool)
             .build();
 
@@ -111,5 +91,22 @@ impl ChatAgent {
             .multi_turn(max_turns)
             .await
             .map_err(|e| DomainError::external(e.to_string()))
+    }
+
+    fn build_prompt(&self, message: &str, history: &[Message]) -> String {
+        if history.is_empty() {
+            return message.to_string();
+        }
+
+        let context = history
+            .iter()
+            .map(|m| format!("{}: {}", m.role.as_str(), m.content))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        format!(
+            "Previous conversation:\n{}\n\nCurrent message from user: {}",
+            context, message
+        )
     }
 }

@@ -5,6 +5,8 @@ use rig::providers::anthropic;
 
 use crate::domain::{ports::LlmService, DomainError};
 
+const DEFAULT_MODEL: &str = "claude-sonnet-4-20250514";
+
 pub struct AnthropicLlm {
     model: String,
 }
@@ -17,7 +19,7 @@ impl AnthropicLlm {
     }
 
     pub fn default_model() -> Self {
-        Self::new("claude-3-opus-20240229")
+        Self::new(DEFAULT_MODEL)
     }
 }
 

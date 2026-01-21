@@ -13,6 +13,7 @@ use crate::domain::Document;
 pub struct CreateDocumentRequest {
     pub name: String,
     pub content: String,
+    #[allow(dead_code)]
     pub content_type: Option<String>,
 }
 
@@ -39,7 +40,9 @@ impl From<Document> for DocumentResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct ListDocumentsQuery {
+    #[allow(dead_code)]
     pub limit: Option<i64>,
+    #[allow(dead_code)]
     pub offset: Option<i64>,
 }
 
@@ -61,40 +64,37 @@ pub async fn create_document(
     State(state): State<AppState>,
     Json(request): Json<CreateDocumentRequest>,
 ) -> Result<Json<DocumentResponse>, StatusCode> {
-    // Use document service if available
-    if let Some(doc_service) = &state.document_service {
-        match doc_service.ingest(&request.name, &request.content).await {
-            Ok((doc, _chunks)) => {
-                return Ok(Json(DocumentResponse::from(doc)));
-            }
-            Err(e) => {
-                tracing::error!(error = %e, "Failed to create document");
-                return Err(StatusCode::INTERNAL_SERVER_ERROR);
-            }
-        }
-    }
+    let Some(doc_service) = &state.document_service else {
+        let doc = Document::new(&request.name);
+        return Ok(Json(DocumentResponse::from(doc)));
+    };
 
-    // Fallback: create document without persistence
-    let doc = Document::new(&request.name);
-    Ok(Json(DocumentResponse::from(doc)))
+    doc_service
+        .ingest(&request.name, &request.content)
+        .await
+        .map(|(doc, _)| Json(DocumentResponse::from(doc)))
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to create document");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
 }
 
 pub async fn get_document(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<DocumentResponse>, StatusCode> {
-    if let Some(doc_service) = &state.document_service {
-        match doc_service.get(id).await {
-            Ok(Some(doc)) => return Ok(Json(DocumentResponse::from(doc))),
-            Ok(None) => return Err(StatusCode::NOT_FOUND),
-            Err(e) => {
-                tracing::error!(error = %e, "Failed to get document");
-                return Err(StatusCode::INTERNAL_SERVER_ERROR);
-            }
+    let Some(doc_service) = &state.document_service else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    match doc_service.get(id).await {
+        Ok(Some(doc)) => Ok(Json(DocumentResponse::from(doc))),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to get document");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
-
-    Err(StatusCode::NOT_FOUND)
 }
 
 pub async fn list_documents(
@@ -109,45 +109,45 @@ pub async fn delete_document(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    if let Some(doc_service) = &state.document_service {
-        match doc_service.delete(id).await {
-            Ok(()) => return Ok(StatusCode::NO_CONTENT),
-            Err(e) => {
-                tracing::error!(error = %e, "Failed to delete document");
-                return Err(StatusCode::INTERNAL_SERVER_ERROR);
-            }
-        }
-    }
+    let Some(doc_service) = &state.document_service else {
+        return Err(StatusCode::NOT_FOUND);
+    };
 
-    Err(StatusCode::NOT_FOUND)
+    doc_service.delete(id).await.map_err(|e| {
+        tracing::error!(error = %e, "Failed to delete document");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn search_documents(
     State(state): State<AppState>,
     Json(request): Json<SearchDocumentsRequest>,
 ) -> Result<Json<Vec<SearchResultResponse>>, StatusCode> {
-    if let Some(rag_service) = &state.rag_service {
-        let top_k = request.limit.unwrap_or(5);
-        match rag_service.retrieve_top_k(&request.query, top_k).await {
-            Ok(results) => {
-                return Ok(Json(
-                    results
-                        .into_iter()
-                        .map(|r| SearchResultResponse {
-                            chunk_id: r.chunk.id,
-                            document_id: r.chunk.document_id,
-                            content: r.chunk.content,
-                            score: r.score,
-                        })
-                        .collect(),
-                ));
-            }
-            Err(e) => {
-                tracing::error!(error = %e, "Search failed");
-                return Err(StatusCode::INTERNAL_SERVER_ERROR);
-            }
-        }
-    }
+    let Some(rag_service) = &state.rag_service else {
+        return Ok(Json(vec![]));
+    };
 
-    Ok(Json(vec![]))
+    let top_k = request.limit.unwrap_or(5);
+    rag_service
+        .retrieve_top_k(&request.query, top_k)
+        .await
+        .map(|results| {
+            Json(
+                results
+                    .into_iter()
+                    .map(|r| SearchResultResponse {
+                        chunk_id: r.chunk.id,
+                        document_id: r.chunk.document_id,
+                        content: r.chunk.content,
+                        score: r.score,
+                    })
+                    .collect(),
+            )
+        })
+        .map_err(|e| {
+            tracing::error!(error = %e, "Search failed");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
 }

@@ -35,6 +35,7 @@ pub async fn chat_handler(
     Json(request): Json<ChatRequest>,
 ) -> Result<Json<ChatResponse>, StatusCode> {
     let mut job = ProcessChatJob::new(&request.message);
+
     if let Some(conv_id) = request.conversation_id {
         job = job.with_conversation(conv_id);
     }
