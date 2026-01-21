@@ -23,4 +23,4 @@ single-char-binding-names-threshold = 5
 allowed-idents-below-min-chars = ["i", "j", "x", "y", "z", "id", "db", "tx", "rx", "ok", "fs"]
 
 # MSRV (Minimum Supported Rust Version)
-msrv = "1.75"
+msrv = "1.80"
